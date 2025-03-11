@@ -3,7 +3,7 @@ using UnityEngine;
 
 public class InventoryManager : MonoBehaviour
 {
-    [SerializeField] private List<Item> itemsInBackpack = new List<Item>(); // Список предметов в рюкзаке
+   /* [SerializeField] private List<Item> itemsInBackpack = new List<Item>(); // Список предметов в рюкзаке
     public static InventoryManager Instance { get; private set; }
     private void Awake()
     {
@@ -45,5 +45,5 @@ public class InventoryManager : MonoBehaviour
     public List<Item> GetItems()
     {
         return itemsInBackpack;
-    }
+    }*/
 }

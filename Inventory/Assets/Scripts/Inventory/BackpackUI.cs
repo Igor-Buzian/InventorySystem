@@ -12,7 +12,13 @@ public class BackpackUI : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
     [SerializeField] private RectTransform[] typeSlots;
     private Collider BackPakCollider;
     private bool mouseOverUI;
+    [SerializeField] private RectTransform inventoryPanelRect;
 
+    private bool IsMouseOverInventory()
+    {
+        Vector2 localMousePosition = inventoryPanelRect.InverseTransformPoint(Input.mousePosition);
+        return inventoryPanelRect.rect.Contains(localMousePosition);
+    }
     private void Start()
     {
         BackPakCollider = GetComponent<Collider>();

@@ -8,104 +8,78 @@ public class ItemDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private Item item;
     private Vector3 startPosition;
     private Transform originalParent;
-    float minHeight = 2f;
+    private float minGroundY = 0.5f; // Minimum ground height
+
     private void Awake() => item = GetComponent<Item>();
 
     public void OnBeginDrag(PointerEventData eventData)
     {
         startPosition = transform.position;
         originalParent = transform.parent;
-        transform.SetParent(GameObject.Find("InventoryCanvas").transform);
+        // Bring the item to the front by setting its parent to the InventoryCanvas
+        GameObject canvas = GameObject.Find("InventoryCanvas");
+        if (canvas != null)
+            transform.SetParent(canvas.transform);
     }
 
-    public void OnDrag(PointerEventData eventData) => transform.position = Input.mousePosition;
+    public void OnDrag(PointerEventData eventData)
+    {
+        transform.position = Input.mousePosition;
+    }
 
     public void OnEndDrag(PointerEventData eventData)
     {
-        bool isOverInventory = IsOverInventorySlot(out InventorySlot slot);
-
-        if (isOverInventory)
+        if (IsOverInventorySlot(out InventorySlot slot))
         {
-            HandleInventoryDrop();
+            if (Inventory.Instance.AddItem(item))
+            {
+                item.SetActiveState(false); // Отключите только визуальную репрезентацию
+                SendToServer(item.ID, true);
+                // Не уничтожаем объект, просто возвращаем его в пул
+                ObjectPool.Instance.Return(item.Type.ToString() + "Pool", gameObject);
+            }
         }
         else
         {
-            HandleWorldDrop(eventData); // Передаем eventData, чтобы использовать его для получения позиции
+            Inventory.Instance.RemoveItem(item);
+            SendToServer(item.ID, false);
+            DropItemInWorld(eventData);
         }
-
         ResetPosition();
     }
 
-    private void HandleInventoryDrop()
+    private void DropItemInWorld(PointerEventData eventData)
     {
-        if (!Inventory.Instance.ItemsInBackpack.Contains(item))
-        {
-            Inventory.Instance.AddItem(item);
-         //   gameObject.SetActive(false); // Отключаем оригинал
-        }
-    }
-
-    private void HandleWorldDrop(PointerEventData eventData)
-    {
-        Debug.Log($"Dropped {item.Name} in world");
-        Inventory.Instance.RemoveItem(item);
-        InstantiateWorldItem(eventData); // Передаем eventData
-    }
-
-    private void InstantiateWorldItem(PointerEventData eventData)
-    {
-        string poolName = "";
-
-        switch (item.Type)
-        {
-            case ItemType.Weapon:
-                poolName = "WeaponPool";
-                break;
-            case ItemType.Tool:
-                poolName = "ToolPool";
-                break;
-            case ItemType.Consumable:
-                poolName = "ConsumablePool";
-                break;
-        }
-
+        string poolName = item.Type.ToString() + "Pool";
         GameObject worldItem = ObjectPool.Instance.Get(poolName);
 
-        if (worldItem == null)
-        {
-            Debug.LogError("No available objects in pool: " + poolName);
-            return;
-        }
-
-        // Получаем позицию, где была отпущена кнопка
-        Ray ray = Camera.main.ScreenPointToRay(eventData.position);
+        Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
         RaycastHit hit;
+        Vector3 dropPos;
 
-        if (Physics.Raycast(ray, out hit))
+        if (Physics.Raycast(ray, out hit, Mathf.Infinity, LayerMask.GetMask("Ground")))
         {
-            Vector3 dropPosition = hit.point;
-            dropPosition.y += 1.0f; // Поднимаем над землей
+            dropPos = hit.point;
+            dropPos.y = Mathf.Max(dropPos.y, 0.5f); // Убедитесь, что не ниже уровня земли
+        }
+        else
+        {
+            dropPos = Camera.main.transform.position + Camera.main.transform.forward * 1.5f;
+        }
 
-            worldItem.transform.position = dropPosition; // Устанавливаем новую позицию
-            worldItem.SetActive(true); // Убедитесь, что объект активен
+        worldItem.transform.position = dropPos;
+        worldItem.SetActive(true);
 
-            Rigidbody rb = worldItem.GetComponent<Rigidbody>();
-            if (rb)
-            {
-                rb.isKinematic = false;
-                rb.useGravity = true;
-                rb.AddForce(Vector3.up * 2, ForceMode.Impulse);
-            }
+        // Настройка физики
+        Rigidbody rb = worldItem.GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            rb.isKinematic = false;
+            rb.useGravity = true;
         }
     }
-    private void ResetPosition()
-    {
-        transform.SetParent(originalParent); // Возвращаем объект к его оригинальному родителю
 
-        Vector3 newPosition = transform.position;
-        newPosition.y += 1.0f; // Поднимаем над землей
-        transform.position = newPosition;
-    }
+    // Checks if the pointer is over an inventory slot.
     private bool IsOverInventorySlot(out InventorySlot slot)
     {
         slot = null;
@@ -115,12 +89,26 @@ public class ItemDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         };
         List<RaycastResult> results = new List<RaycastResult>();
         EventSystem.current.RaycastAll(pointerData, results);
-
         foreach (var result in results)
         {
             slot = result.gameObject.GetComponent<InventorySlot>();
-            if (slot != null) return true;
+            if (slot != null)
+                return true;
         }
         return false;
+    }
+
+    private void ResetPosition()
+    {
+        transform.SetParent(originalParent);
+        Vector3 newPos = transform.position;
+        newPos.y = Mathf.Max(newPos.y, 2f); // Не допускаем падения под землю
+        transform.position = newPos;
+    }
+
+    private void SendToServer(string itemId, bool added)
+    {
+        Debug.Log(added ? $"Sending to server: {itemId} added to inventory" : $"Sending to server: {itemId} removed from inventory");
+        // Implement server communication here if needed.
     }
 }
