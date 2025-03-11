@@ -4,9 +4,9 @@ using UnityEngine;
 public class Inventory : MonoBehaviour
 {
     public static Inventory Instance { get; private set; }
+    public List<Item> ItemsInBackpack { get; private set; } = new List<Item>();
 
-    [SerializeField] private InventorySlot[] inventorySlots; // Массив UI-слотов
-    private List<Item> itemsInBackpack = new List<Item>();
+    [SerializeField] private InventorySlot[] inventorySlots;
 
     private void Awake()
     {
@@ -16,24 +16,29 @@ public class Inventory : MonoBehaviour
             Destroy(gameObject);
     }
 
-    public void AddItem(Item item)
+    public bool AddItem(Item item)
     {
-        // Предполагаем, что один и тот же предмет добавлять нельзя
-        if (itemsInBackpack.Contains(item))
-            return;
+        if (ItemsInBackpack.Exists(i => i.ID == item.ID)) return false;
 
-        itemsInBackpack.Add(item);
-        item.SetInBackpack(true);
+        ItemsInBackpack.Add(item);
         UpdateUI();
+        return true;
+    }
+
+    public void RemoveItem(Item item)
+    {
+        if (ItemsInBackpack.Remove(item))
+        {
+            UpdateUI();
+        }
     }
 
     private void UpdateUI()
     {
-        // Заполняем слоты предметами из инвентаря
         for (int i = 0; i < inventorySlots.Length; i++)
         {
-            if (i < itemsInBackpack.Count)
-                inventorySlots[i].SetItem(itemsInBackpack[i]);
+            if (i < ItemsInBackpack.Count)
+                inventorySlots[i].SetItem(ItemsInBackpack[i]);
             else
                 inventorySlots[i].ClearSlot();
         }

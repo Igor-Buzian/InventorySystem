@@ -8,46 +8,104 @@ public class ItemDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private Item item;
     private Vector3 startPosition;
     private Transform originalParent;
-
+    float minHeight = 2f;
     private void Awake() => item = GetComponent<Item>();
 
     public void OnBeginDrag(PointerEventData eventData)
     {
-        Debug.Log($"Начало перетаскивания: {gameObject.name}");
         startPosition = transform.position;
         originalParent = transform.parent;
-        // Перемещаем объект в Canvas для корректного отображения (имя Canvas должно совпадать)
-        GameObject canvasObj = GameObject.Find("InventoryCanvas");
-        if (canvasObj != null)
-        {
-            transform.SetParent(canvasObj.transform);
-        }
+        transform.SetParent(GameObject.Find("InventoryCanvas").transform);
     }
 
-    public void OnDrag(PointerEventData eventData)
-    {
-        transform.position = Input.mousePosition;
-    }
+    public void OnDrag(PointerEventData eventData) => transform.position = Input.mousePosition;
 
     public void OnEndDrag(PointerEventData eventData)
     {
-        if (IsOverInventorySlot(out InventorySlot slot))
+        bool isOverInventory = IsOverInventorySlot(out InventorySlot slot);
+
+        if (isOverInventory)
         {
-            Debug.Log("Предмет отпущен над слотом инвентаря.");
-            Inventory.Instance.AddItem(item);
-            // Вместо удаления объекта меняем его цвет на красный
-            item.SetColor(Color.red);
-            // При желании можно вернуть объект обратно в исходного родителя:
-            // transform.SetParent(originalParent);
+            HandleInventoryDrop();
         }
         else
         {
-            Debug.Log("Предмет отпущен вне слота инвентаря.");
-            transform.position = startPosition;
-            transform.SetParent(originalParent);
+            HandleWorldDrop(eventData); // Передаем eventData, чтобы использовать его для получения позиции
+        }
+
+        ResetPosition();
+    }
+
+    private void HandleInventoryDrop()
+    {
+        if (!Inventory.Instance.ItemsInBackpack.Contains(item))
+        {
+            Inventory.Instance.AddItem(item);
+         //   gameObject.SetActive(false); // Отключаем оригинал
         }
     }
 
+    private void HandleWorldDrop(PointerEventData eventData)
+    {
+        Debug.Log($"Dropped {item.Name} in world");
+        Inventory.Instance.RemoveItem(item);
+        InstantiateWorldItem(eventData); // Передаем eventData
+    }
+
+    private void InstantiateWorldItem(PointerEventData eventData)
+    {
+        string poolName = "";
+
+        switch (item.Type)
+        {
+            case ItemType.Weapon:
+                poolName = "WeaponPool";
+                break;
+            case ItemType.Tool:
+                poolName = "ToolPool";
+                break;
+            case ItemType.Consumable:
+                poolName = "ConsumablePool";
+                break;
+        }
+
+        GameObject worldItem = ObjectPool.Instance.Get(poolName);
+
+        if (worldItem == null)
+        {
+            Debug.LogError("No available objects in pool: " + poolName);
+            return;
+        }
+
+        // Получаем позицию, где была отпущена кнопка
+        Ray ray = Camera.main.ScreenPointToRay(eventData.position);
+        RaycastHit hit;
+
+        if (Physics.Raycast(ray, out hit))
+        {
+            Vector3 dropPosition = hit.point;
+            dropPosition.y += 1.0f; // Поднимаем над землей
+
+            worldItem.transform.position = dropPosition; // Устанавливаем новую позицию
+            worldItem.SetActive(true); // Убедитесь, что объект активен
+
+            Rigidbody rb = worldItem.GetComponent<Rigidbody>();
+            if (rb)
+            {
+                rb.isKinematic = false;
+                rb.useGravity = true;
+                rb.AddForce(Vector3.up * 2, ForceMode.Impulse);
+            }
+        }
+    }
+    private void ResetPosition()
+    {
+        transform.SetParent(originalParent); // Возвращаем объект к его оригинальному родителю
+
+        Vector3 newPosition = transform.position;
+        newPosition.y += 1.0f; // Поднимаем над землей
+        transform.position = newPosition;
+    }
     private bool IsOverInventorySlot(out InventorySlot slot)
     {
         slot = null;
@@ -61,13 +119,8 @@ public class ItemDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         foreach (var result in results)
         {
             slot = result.gameObject.GetComponent<InventorySlot>();
-            if (slot != null)
-            {
-                Debug.Log($"Обнаружен слот инвентаря: {slot.name}");
-                return true;
-            }
+            if (slot != null) return true;
         }
-        Debug.Log("Слот инвентаря не обнаружен под курсором.");
         return false;
     }
 }
