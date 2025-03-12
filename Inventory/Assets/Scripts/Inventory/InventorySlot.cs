@@ -5,48 +5,89 @@ using UnityEngine.UI;
 
 public class InventorySlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
-    private Item storedItem;
-    private Vector3 startPosition;
-    private Transform originalParent;
-    private Image itemIcon;
-    private Text itemName;
-    private Text itemWeight;
+    private Item _storedItem;
+    private Vector3 _startPosition;
+    private Transform _originalParent;
+    private Image _itemIcon;
+    private Text _itemName;
+    private Text _itemWeight;
+    private Canvas _inventoryCanvas;
 
     private void Awake()
     {
-        itemIcon = GetComponentInChildren<Image>();
+        _itemIcon = GetComponentInChildren<Image>();
         Text[] texts = GetComponentsInChildren<Text>();
-
         if (texts.Length >= 2)
         {
-            itemName = texts[0];
-            itemWeight = texts[1];
+            _itemName = texts[0];
+            _itemWeight = texts[1];
+        }
+        _inventoryCanvas = GameObject.Find("InventoryCanvas").GetComponent<Canvas>();
+
+        Inventory.Instance.OnItemAdded.AddListener(OnItemAdded);
+        Inventory.Instance.OnItemRemoved.AddListener(OnItemRemoved);
+    }
+
+    private void OnDestroy()
+    {
+        if (Inventory.Instance != null)
+        {
+            Inventory.Instance.OnItemAdded.RemoveListener(OnItemAdded);
+            Inventory.Instance.OnItemRemoved.RemoveListener(OnItemRemoved);
+        }
+    }
+
+    private void OnItemAdded(Item item)
+    {
+        if (item == _storedItem)
+        {
+            UpdateSlotUI();
+        }
+    }
+
+    private void OnItemRemoved(Item item)
+    {
+        if (item == _storedItem)
+        {
+            ClearSlot();
         }
     }
 
     public void SetItem(Item item)
     {
-        storedItem = item;
-        itemIcon.sprite = item.Icon;
-        itemName.text = item.Name;
-        itemWeight.text = $"{item.Weight} кг";
-        gameObject.SetActive(true);
+        _storedItem = item;
+        UpdateSlotUI();
+    }
+
+    private void UpdateSlotUI()
+    {
+        if (_storedItem != null)
+        {
+            _itemIcon.sprite = _storedItem.Icon;
+            _itemName.text = _storedItem.Name;
+            _itemWeight.text = $"{_storedItem.Weight} kg";
+            _itemIcon.enabled = true;
+        }
+        else
+        {
+            ClearSlot();
+        }
     }
 
     public void ClearSlot()
     {
-        storedItem = null;
-        itemIcon.sprite = null;
-        itemName.text = "";
-        itemWeight.text = "";
+        _storedItem = null;
+        _itemIcon.sprite = null;
+        _itemName.text = string.Empty;
+        _itemWeight.text = string.Empty;
     }
 
     public void OnBeginDrag(PointerEventData eventData)
     {
-        if (storedItem == null) return;
-        startPosition = transform.position;
-        originalParent = transform.parent;
-        transform.SetParent(GameObject.Find("InventoryCanvas").transform);
+        if (_storedItem == null) return;
+        _startPosition = transform.position;
+        _originalParent = transform.parent;
+        transform.SetParent(_inventoryCanvas.transform);
     }
 
     public void OnDrag(PointerEventData eventData) => transform.position = Input.mousePosition;
@@ -56,29 +97,28 @@ public class InventorySlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
         if (!IsOverInventory())
         {
             DropItemInWorld();
-            Inventory.Instance.RemoveItem(storedItem);
+            Inventory.Instance.RemoveItem(_storedItem);
         }
-        transform.position = startPosition;
-        transform.SetParent(originalParent);
+        transform.position = _startPosition;
+        transform.SetParent(_originalParent);
     }
 
     private void DropItemInWorld()
     {
-        if (storedItem == null) return;
+        if (_storedItem == null) return;
 
-        GameObject worldItem = ObjectPool.Instance.Get(storedItem.Type.ToString() + "Pool");
+        string poolName = $"{_storedItem.Type}Pool";
+        GameObject worldItem = ObjectPool.Instance.Get(poolName);
         if (worldItem == null) return;
 
-        // Установка позиции объекта в мир
         worldItem.transform.position = Camera.main.transform.position + Camera.main.transform.forward * 2;
-
-        // Активация объекта и настройка физики
         worldItem.SetActive(true);
+
         Rigidbody rb = worldItem.GetComponent<Rigidbody>();
         if (rb != null)
         {
-            rb.isKinematic = false; // Убедитесь, что он не кинематический
-            rb.useGravity = true; // Включить гравитацию
+            rb.isKinematic = false;
+            rb.useGravity = true;
         }
 
         ClearSlot();
@@ -90,13 +130,13 @@ public class InventorySlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
         {
             position = Input.mousePosition
         };
+
         List<RaycastResult> results = new List<RaycastResult>();
         EventSystem.current.RaycastAll(pointerData, results);
 
         foreach (var result in results)
         {
-            if (result.gameObject.CompareTag("InventoryUI"))
-                return true;
+            if (result.gameObject.CompareTag("InventoryUI")) return true;
         }
         return false;
     }

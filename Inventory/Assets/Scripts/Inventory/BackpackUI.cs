@@ -1,68 +1,47 @@
-﻿using System;
-using Unity.VisualScripting;
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.EventSystems;
-using UnityEngine.UI;
 
 public class BackpackUI : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
 {
-    [SerializeField] private GameObject inventoryPanel;
-    [SerializeField] private GameObject CharacterBackPack;
-    [SerializeField] private GameObject TakeBackPack;
-    [SerializeField] private RectTransform[] typeSlots;
-    private Collider BackPakCollider;
-    private bool mouseOverUI;
-    [SerializeField] private RectTransform inventoryPanelRect;
+    [SerializeField] private GameObject _inventoryPanel;
+    [SerializeField] private GameObject _characterBackpack;
+    [SerializeField] private GameObject _takeBackpack;
+    [SerializeField] private RectTransform _inventoryPanelRect;
 
-    private bool IsMouseOverInventory()
-    {
-        Vector2 localMousePosition = inventoryPanelRect.InverseTransformPoint(Input.mousePosition);
-        return inventoryPanelRect.rect.Contains(localMousePosition);
-    }
+    private Collider _backpackCollider;
+    private bool _mouseOverUI;
+
     private void Start()
     {
-        BackPakCollider = GetComponent<Collider>();
+        _backpackCollider = GetComponent<Collider>();
     }
 
-    public void OnPointerEnter(PointerEventData eventData)
-    {
-      //  mouseOverUI = true;
-        Debug.Log("Mouse entered backpack UI.");
-    }
-
-    public void OnPointerExit(PointerEventData eventData)
-    {
-       // mouseOverUI = false;
-        Debug.Log("Mouse exited backpack UI.");
-    }
+    public void OnPointerEnter(PointerEventData eventData) => Debug.Log("Mouse entered UI");
+    public void OnPointerExit(PointerEventData eventData) => Debug.Log("Mouse exited UI");
 
     private void OnTriggerEnter(Collider other)
     {
         if (other.CompareTag("Animal"))
         {
-            TakeBackPack.SetActive(false);
-            CharacterBackPack.SetActive(true);
-            mouseOverUI = true;
-            BackPakCollider.enabled = false;
+            _takeBackpack.SetActive(false);
+            _characterBackpack.SetActive(true);
+            _mouseOverUI = true;
+            _backpackCollider.enabled = false;
         }
     }
 
     private void Update()
     {
-        if(!mouseOverUI)return;
+        if (!_mouseOverUI) return;
+
         if (Input.GetMouseButton(1))
         {
-            inventoryPanel.SetActive(true);
-            UpdateUI();
-            Debug.Log("Inventory panel opened.");
+            _inventoryPanel.SetActive(true);
+            Debug.Log("Inventory opened");
         }
         else
         {
-            inventoryPanel.SetActive(false);
+            _inventoryPanel.SetActive(false);
         }
-    }
-    private void UpdateUI()
-    {
-        // Implementation for updating UI based on inventory
     }
 }

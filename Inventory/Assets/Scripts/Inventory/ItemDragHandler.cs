@@ -8,7 +8,7 @@ public class ItemDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private Item item;
     private Vector3 startPosition;
     private Transform originalParent;
-    private float minGroundY = 0.5f; // Minimum ground height
+    private float minGroundY = 0.5f;
 
     private void Awake() => item = GetComponent<Item>();
 
@@ -16,7 +16,7 @@ public class ItemDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     {
         startPosition = transform.position;
         originalParent = transform.parent;
-        // Bring the item to the front by setting its parent to the InventoryCanvas
+
         GameObject canvas = GameObject.Find("InventoryCanvas");
         if (canvas != null)
             transform.SetParent(canvas.transform);
@@ -24,7 +24,10 @@ public class ItemDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
 
     public void OnDrag(PointerEventData eventData)
     {
-        transform.position = Input.mousePosition;
+        Vector3 screenPos = Input.mousePosition;
+        float distance = Vector3.Distance(Camera.main.transform.position, startPosition);
+        screenPos.z = distance;
+        transform.position = Camera.main.ScreenToWorldPoint(screenPos);
     }
 
     public void OnEndDrag(PointerEventData eventData)
@@ -33,9 +36,8 @@ public class ItemDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         {
             if (Inventory.Instance.AddItem(item))
             {
-                item.SetActiveState(false); // Отключите только визуальную репрезентацию
+                item.SetActiveState(false);
                 SendToServer(item.ID, true);
-                // Не уничтожаем объект, просто возвращаем его в пул
                 ObjectPool.Instance.Return(item.Type.ToString() + "Pool", gameObject);
             }
         }
@@ -48,38 +50,6 @@ public class ItemDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         ResetPosition();
     }
 
-    private void DropItemInWorld(PointerEventData eventData)
-    {
-        string poolName = item.Type.ToString() + "Pool";
-        GameObject worldItem = ObjectPool.Instance.Get(poolName);
-
-        Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-        RaycastHit hit;
-        Vector3 dropPos;
-
-        if (Physics.Raycast(ray, out hit, Mathf.Infinity, LayerMask.GetMask("Ground")))
-        {
-            dropPos = hit.point;
-            dropPos.y = Mathf.Max(dropPos.y, 0.5f); // Убедитесь, что не ниже уровня земли
-        }
-        else
-        {
-            dropPos = Camera.main.transform.position + Camera.main.transform.forward * 1.5f;
-        }
-
-        worldItem.transform.position = dropPos;
-        worldItem.SetActive(true);
-
-        // Настройка физики
-        Rigidbody rb = worldItem.GetComponent<Rigidbody>();
-        if (rb != null)
-        {
-            rb.isKinematic = false;
-            rb.useGravity = true;
-        }
-    }
-
-    // Checks if the pointer is over an inventory slot.
     private bool IsOverInventorySlot(out InventorySlot slot)
     {
         slot = null;
@@ -98,17 +68,49 @@ public class ItemDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         return false;
     }
 
+    private void DropItemInWorld(PointerEventData eventData)
+    {
+        string poolName = item.Type.ToString() + "Pool";
+        GameObject worldItem = ObjectPool.Instance.Get(poolName);
+        if (worldItem == null)
+        {
+            Debug.LogError("No available object in pool: " + poolName);
+            return;
+        }
+
+        Ray ray = Camera.main.ScreenPointToRay(eventData.position);
+        RaycastHit hit;
+        Vector3 dropPos;
+        if (Physics.Raycast(ray, out hit, Mathf.Infinity, LayerMask.GetMask("Ground")))
+        {
+            dropPos = hit.point;
+            dropPos.y = Mathf.Max(dropPos.y + 0.5f, minGroundY);
+        }
+        else
+        {
+            dropPos = Camera.main.transform.position + Camera.main.transform.forward * 1.5f;
+            dropPos.y = Mathf.Max(dropPos.y, minGroundY);
+        }
+        worldItem.transform.position = dropPos;
+        worldItem.SetActive(true);
+        Rigidbody rb = worldItem.GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            rb.isKinematic = false;
+            rb.useGravity = true;
+        }
+    }
+
     private void ResetPosition()
     {
         transform.SetParent(originalParent);
         Vector3 newPos = transform.position;
-        newPos.y = Mathf.Max(newPos.y, 2f); // Не допускаем падения под землю
+        newPos.y = Mathf.Max(newPos.y, 2f);
         transform.position = newPos;
     }
 
     private void SendToServer(string itemId, bool added)
     {
         Debug.Log(added ? $"Sending to server: {itemId} added to inventory" : $"Sending to server: {itemId} removed from inventory");
-        // Implement server communication here if needed.
     }
 }

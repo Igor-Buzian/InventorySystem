@@ -6,73 +6,72 @@ public class ObjectPool : MonoBehaviour
     [System.Serializable]
     public class Pool
     {
-        public string poolName;      // Pool name (e.g. "WeaponPool")
-        public GameObject prefab;    // Prefab for the pool
-        public int size;             // Number of instances in pool
-        public Transform instantiateTransform; // Transform for instantiation position
+        public string poolName;
+        public GameObject prefab;
+        public int size;
+        public Transform instantiateTransform;
     }
 
-    public List<Pool> pools;  // List of pools to initialize
-    private Dictionary<string, Queue<GameObject>> poolDictionary;
+    public List<Pool> pools;
+    private Dictionary<string, Queue<GameObject>> _poolDictionary;
     public static ObjectPool Instance { get; private set; }
 
     private void Awake()
     {
-        if (Instance == null)
-            Instance = this;
-        else
-            Destroy(gameObject);
+        if (Instance != null) Destroy(gameObject);
+        else Instance = this;
 
-        poolDictionary = new Dictionary<string, Queue<GameObject>>();
+        _poolDictionary = new Dictionary<string, Queue<GameObject>>();
 
-        // Create each pool and enqueue inactive objects
-        foreach (var pool in pools)
+        foreach (Pool pool in pools)
         {
             Queue<GameObject> objectPool = new Queue<GameObject>();
             for (int i = 0; i < pool.size; i++)
             {
-                // Устанавливаем позицию для инициализации
-                GameObject obj = Instantiate(pool.prefab, pool.instantiateTransform.position, Quaternion.identity);
-                obj.SetActive(true); // Делаем объект активным сразу
+                GameObject obj = Instantiate(
+                    pool.prefab,
+                    pool.instantiateTransform.position,
+                    Quaternion.identity
+                );
+                obj.SetActive(true);
                 objectPool.Enqueue(obj);
             }
-            poolDictionary.Add(pool.poolName, objectPool);
+            _poolDictionary.Add(pool.poolName, objectPool);
         }
     }
 
     public GameObject Get(string poolName)
     {
-        if (poolDictionary.TryGetValue(poolName, out Queue<GameObject> pool) && pool.Count > 0)
+        if (!_poolDictionary.TryGetValue(poolName, out Queue<GameObject> pool)) return null;
+
+        if (pool.Count > 0)
         {
             GameObject obj = pool.Dequeue();
             obj.SetActive(true);
             return obj;
         }
 
-        Debug.LogWarning($"No available object in pool: {poolName}, instantiating a new one.");
+        Pool poolData = pools.Find(p => p.poolName == poolName);
+        if (poolData == null) return null;
 
-        if (pools.Exists(p => p.poolName == poolName))
-        {
-            Pool poolData = pools.Find(p => p.poolName == poolName);
-            GameObject newObj = Instantiate(poolData.prefab, poolData.instantiateTransform.position + Vector3.up, Quaternion.identity);
-            newObj.SetActive(true);
-            return newObj;
-        }
-
-        return null;
+        GameObject newObj = Instantiate(
+            poolData.prefab,
+            poolData.instantiateTransform.position + Vector3.up,
+            Quaternion.identity
+        );
+        newObj.SetActive(true);
+        return newObj;
     }
 
-    // Return an object back to the pool and deactivate it
     public void Return(string poolName, GameObject obj)
     {
-        if (!poolDictionary.ContainsKey(poolName))
-            poolDictionary[poolName] = new Queue<GameObject>();
+        if (!_poolDictionary.ContainsKey(poolName))
+            _poolDictionary[poolName] = new Queue<GameObject>();
 
-        // Сбрасываем состояние объекта
-        var item = obj.GetComponent<Item>();
+        Item item = obj.GetComponent<Item>();
         if (item != null) item.ResetState();
 
         obj.SetActive(false);
-        poolDictionary[poolName].Enqueue(obj);
+        _poolDictionary[poolName].Enqueue(obj);
     }
 }
